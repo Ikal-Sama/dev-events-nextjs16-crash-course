@@ -10,21 +10,31 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
 
-    let event;
-    try {
-      event = Object.fromEntries(formData.entries());
-    } catch (error) {
-      return NextResponse.json(
-        { message: "Invalid JSON data format" },
-        { status: 400 },
-      );
-    }
+    const event = Object.fromEntries(formData.entries());
 
     const file = formData.get("image") as File;
 
     if (!file) {
       return NextResponse.json(
         { message: "Image file is required" },
+        { status: 400 },
+      );
+    }
+
+    // Validate file type
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+    if (!allowedTypes.includes(file.type)) {
+      return NextResponse.json(
+        { message: "Invalid file type. Only PNG, JPEG, WebP, and GIF images are allowed" },
+        { status: 400 },
+      );
+    }
+
+    // Validate file size (5MB max)
+    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    if (file.size > maxSize) {
+      return NextResponse.json(
+        { message: "File too large. Maximum file size is 5MB" },
         { status: 400 },
       );
     }
