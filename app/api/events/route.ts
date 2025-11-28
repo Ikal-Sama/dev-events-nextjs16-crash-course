@@ -1,0 +1,105 @@
+import { v2 as cloudinary } from "cloudinary";
+import Event from "@/database/event.model";
+import connectDB from "@/lib/mongodb";
+import { NextRequest, NextResponse } from "next/server";
+
+// Create Event API
+export async function POST(req: NextRequest) {
+  try {
+    await connectDB();
+
+    const formData = await req.formData();
+
+    const event = Object.fromEntries(formData.entries());
+
+    const file = formData.get("image") as File;
+
+    if (!file) {
+      return NextResponse.json(
+        { message: "Image file is required" },
+        { status: 400 },
+      );
+    }
+
+    // Validate file type
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+    if (!allowedTypes.includes(file.type)) {
+      return NextResponse.json(
+        { message: "Invalid file type. Only PNG, JPEG, WebP, and GIF images are allowed" },
+        { status: 400 },
+      );
+    }
+
+    // Validate file size (5MB max)
+    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+    if (file.size > maxSize) {
+      return NextResponse.json(
+        { message: "File too large. Maximum file size is 5MB" },
+        { status: 400 },
+      );
+    }
+
+    const tags = JSON.parse(formData.get("tags") as string);
+    const agenda = JSON.parse(formData.get("agenda") as string);
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const uploadResult = await new Promise((resolve, reject) => {
+      cloudinary.uploader
+        .upload_stream(
+          { resource_type: "image", folder: "DevEvent" },
+          (error, results) => {
+            if (error) return reject(error);
+
+            resolve(results);
+          },
+        )
+        .end(buffer);
+    });
+
+    event.image = (uploadResult as { secure_url: string }).secure_url;
+
+    const createdEvent = await Event.create({
+      ...event,
+      tags: tags,
+      agenda: agenda,
+    });
+
+    return NextResponse.json(
+      {
+        message: "Event created successfully",
+        event: createdEvent,
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json(
+      {
+        message: "Event Creation Failed",
+        error: error instanceof Error ? error.message : "Unknown Error",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+// Get All Events API
+export async function GET(req: NextRequest) {
+  try {
+    await connectDB();
+
+    const events = await Event.find().sort({ createdAt: -1 });
+
+    return NextResponse.json(
+      { message: "Event fetched successfully", events },
+      { status: 200 },
+    );
+  } catch (error) {
+    return NextResponse.json(
+      { message: "Event fetching failed", error },
+      { status: 500 },
+    );
+  }
+}
